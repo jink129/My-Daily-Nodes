@@ -1,28 +1,37 @@
-import asyncio
-import aiohttp
+import requests
 import base64
 
-# Turkey keywords
-TR_KEYWORDS = [
-    "turkey",
-    "istanbul",
-    "ankara",
-    "izmir",
-    "turkiye",
-    "🇹🇷"
+# -------- SETTINGS --------
+
+MAX_SERVERS = 200
+
+COUNTRY_KEYWORDS = [
+"turkey","istanbul","ankara","izmir","turkiye",
+"germany","frankfurt",
+"netherlands","amsterdam",
+"france","paris",
+"uk","london",
+"usa","united states",
+"canada","toronto",
+"singapore",
+"japan","tokyo",
+"korea","seoul"
 ]
 
-# Source list (GitHub raw)
 SOURCES = [
 "https://raw.githubusercontent.com/mahdibland/V2RayAggregator/master/sub/sub_merge.txt",
 "https://raw.githubusercontent.com/barry-far/V2ray-Configs/main/All_Configs_Sub.txt",
-"https://raw.githubusercontent.com/aiboboxx/v2rayfree/main/v2",
 "https://raw.githubusercontent.com/Pawdroid/Free-servers/main/sub",
-"https://raw.githubusercontent.com/ts-sf/fly/main/v2",
+"https://raw.githubusercontent.com/aiboboxx/v2rayfree/main/v2",
 "https://raw.githubusercontent.com/mfuu/v2ray/master/v2ray",
+"https://raw.githubusercontent.com/ermaozi/get_subscribe/main/subscribe/v2ray.txt",
+"https://raw.githubusercontent.com/freefq/free/master/v2",
+"https://raw.githubusercontent.com/peasoft/NoMoreWalls/master/list_raw.txt",
+"https://raw.githubusercontent.com/ripaojiedian/freenode/main/sub",
+"https://raw.githubusercontent.com/ts-sf/fly/main/v2"
 ]
 
-TIMEOUT = 15
+# -------- UTILS --------
 
 def fix_base64(data):
     missing = len(data) % 4
@@ -30,69 +39,72 @@ def fix_base64(data):
         data += "=" * (4 - missing)
     return data
 
-async def fetch(session, url):
-    try:
-        async with session.get(url, timeout=TIMEOUT) as r:
-            txt = await r.text()
-            # Base64 ဖြစ်နေလျှင် ဖြည်ချရန်၊ ရိုးရိုး Text ဆိုလျှင် ဒီအတိုင်းပြန်ပေးရန်
-            try:
-                decoded = base64.b64decode(fix_base64(txt.strip())).decode('utf-8')
-                return decoded
-            except:
-                return txt
-    except:
-        return ""
+# -------- FETCH --------
 
-def filter_turkey(lines):
+def fetch_sources():
+    configs = []
+    for url in SOURCES:
+        try:
+            r = requests.get(url, timeout=15)
+            text = r.text.strip()
+
+            # decode base64 if needed
+            if "vmess://" not in text and "vless://" not in text:
+                try:
+                    text = base64.b64decode(fix_base64(text)).decode('utf-8', errors='ignore')
+                except:
+                    pass
+
+            configs += text.splitlines()
+        except:
+            pass
+
+    return configs
+
+# -------- FILTER --------
+
+def filter_nodes(configs):
     results = []
-    for cfg in lines:
-        if not cfg.strip():
-            continue
-            
-        cfg_l = cfg.lower()
-        if any(k in cfg_l for k in TR_KEYWORDS):
-            results.append(cfg)
+    for cfg in configs:
+        t = cfg.lower()
+        if any(k in t for k in COUNTRY_KEYWORDS):
+            if cfg.startswith(("vmess://","vless://","trojan://", "ss://")):
+                results.append(cfg)
+
+    # remove duplicates
+    results = list(set(results))
+
+    # limit
+    results = results[:MAX_SERVERS]
     return results
 
-async def main():
-    connector = aiohttp.TCPConnector(limit=50)
-    async with aiohttp.ClientSession(connector=connector) as session:
-        print("Fetching sources...")
-        tasks = [fetch(session, url) for url in SOURCES]
-        responses = await asyncio.gather(*tasks)
+# -------- SAVE --------
 
-    configs = []
-    for text in responses:
-        lines = text.splitlines()
-        configs.extend(lines)
+def save_results(nodes):
+    with open("nodes.txt","w", encoding="utf-8") as f:
+        for n in nodes:
+            f.write(n+"\n")
 
-    # ပုံစံတူ Config များကို ဖယ်ရှားရန်
-    configs = list(set(configs))
+    sub = base64.b64encode("\n".join(nodes).encode('utf-8')).decode('utf-8')
+    with open("subscription.txt","w", encoding="utf-8") as f:
+        f.write(sub)
 
-    print("Filtering Turkey nodes...")
-    turkey_nodes = filter_turkey(configs)
+# -------- MAIN --------
 
+def main():
+    print("Fetching sources...")
+    configs = fetch_sources()
     print("Total configs:", len(configs))
-    print("Turkey nodes:", len(turkey_nodes))
 
-    if not turkey_nodes:
-        print("No Turkey nodes found.")
+    nodes = filter_nodes(configs)
+    print("Filtered nodes:", len(nodes))
+
+    if not nodes:
+        print("No nodes found.")
         return
 
-    # save raw
-    with open("turkey_nodes.txt", "w", encoding="utf-8") as f:
-        for c in turkey_nodes:
-            f.write(c + "\n")
-
-    # base64 subscription
-    sub = base64.b64encode("\n".join(turkey_nodes).encode('utf-8')).decode('utf-8')
-    with open("turkey_subscription.txt", "w", encoding="utf-8") as f:
-        f.write(sub)
-        
-    print("Files saved successfully!")
+    save_results(nodes)
+    print("Files successfully generated: nodes.txt, subscription.txt")
 
 if __name__ == "__main__":
-    import sys
-    if sys.platform == "win32":
-        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-    asyncio.run(main())
+    main()
