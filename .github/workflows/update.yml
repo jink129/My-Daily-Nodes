@@ -1,4 +1,4 @@
-name: Update Turkey Nodes
+name: Update VPN Nodes
 
 on:
   schedule:
@@ -32,6 +32,6 @@ jobs:
         run: |
           git config --local user.name "github-actions[bot]"
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
-          git add .
-          git commit -m "Update Turkey Nodes" || echo "No changes to commit"
+          git add nodes.txt subscription.txt
+          git commit -m "Auto-update VPN Nodes" || echo "No changes to commit"
           git push
